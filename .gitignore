@@ -102,3 +102,6 @@ ENV/
 
 # idea
 .idea/
+
+# JavaScript
+*.js
