@@ -45,10 +45,9 @@ BASE_URL = "https://www.instagram.com"
 # QUERY = "/_8_jjini/"
 NEXT_URL = 'https://www.instagram.com/graphql/query/?query_id={0}&variables={1}'
 
-proxy = {
-    'http': 'http://127.0.0.1:55209',
-    'https': 'http://127.0.0.1:55209'
-}
+with open('./config.json', 'r') as f:
+    proxy = json.load(f)
+    click.echo(proxy)
 
 
 def crawl(query):
