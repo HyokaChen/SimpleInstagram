@@ -53,18 +53,19 @@ with open('./config.json', 'r') as f:
 def crawl(query):
     if not query:
         raise Exception('请输入正确的Instagram用户')
+    folder = query.replace('.', '-')
     click.echo('start...')
     top_url = None
     in_top_url_flag = False
     qq = requests.session()
     try:
-        if not os.path.exists('E:\\kankan\\%s' % query):
-            os.mkdir('E:\\kankan\\%s' % query)
+        if not os.path.exists('E:\\kankan\\%s' % folder):
+            os.mkdir('E:\\kankan\\%s' % folder)
 
         all_imgs_url = []
         new_imgs_url = []
-        if os.path.exists('E:\\kankan\\%s.txt' % query):
-            with open('E:\\kankan\\%s.txt' % query, mode='r', encoding='utf-8') as f:
+        if os.path.exists('E:\\kankan\\%s\\%s.txt' % (folder, folder)):
+            with open('E:\\kankan\\%s\\%s.txt' % (folder, folder), mode='r', encoding='utf-8') as f:
                 for line in f.readlines():
                     if line.strip():
                         all_imgs_url.append(line)
@@ -129,7 +130,7 @@ def crawl(query):
                 # qq.close()
         if new_imgs_url:
             all_urls = new_imgs_url + all_imgs_url
-            with open('E:\\kankan\\%s.txt' % query, mode='w', encoding='utf-8') as f:
+            with open('E:\\kankan\\%s\\%s.txt' % (folder, folder), mode='w', encoding='utf-8') as f:
                     for u in all_urls:
                         f.write(u + '\n')
         # t = threading.Thread(target=translate, args=(top_url, new_imgs_url, all_imgs_url, query))
@@ -148,19 +149,20 @@ def translate(top_url, news_imgs_url, all_imgs_url, path):
         click.echo('enter news')
         download(path, news_imgs_url)
     if top_url:
-        file_md5 = md5()
-        file_md5.update(top_url.encode('utf-8'))
-        file_name = file_md5.hexdigest()
-        if os.path.exists('E:\\kankan\\%s\\%s.jpg' % (path, file_name)):
-            return
-        else:
-            click.echo('enter all')
-            download(path, all_imgs_url)
+        # file_md5 = md5()
+        # file_md5.update(top_url.encode('utf-8'))
+        # file_name = file_md5.hexdigest()
+        # if os.path.exists('E:\\kankan\\%s\\%s.jpg' % (path, file_name)):
+        #     return
+        # else:
+        click.echo('enter all')
+        download(path, all_imgs_url)
 
 
 def download(path, urls):
     ss = requests.session()
     temp_url = BASE_URL + '/' + path + '/'
+    folder = path.replace('.', '-')
     header = {
         "Referer": temp_url,
         "Origin": "https://www.instagram.com/",
@@ -181,7 +183,7 @@ def download(path, urls):
             file_md5 = md5()
             file_md5.update(url.encode('utf-8'))
             file_name = file_md5.hexdigest()
-            if os.path.exists('E:\\kankan\\%s\\%s.jpg' % (path, file_name)):
+            if os.path.exists('E:\\kankan\\%s\\%s.jpg' % (folder, file_name)):
                 count += 1
                 continue
             time.sleep(2)
@@ -189,7 +191,7 @@ def download(path, urls):
             click.echo(url + '=>' + str(res.status_code))
             click.echo(res.headers)
             if res.status_code == 200:
-                with open('E:\\kankan\\%s\\%s.jpg' % (path, file_name), mode='wb') as f:
+                with open('E:\\kankan\\%s\\%s.jpg' % (folder, file_name), mode='wb') as f:
                     f.write(res.content)
                     click.echo('%s.jpg save!' % file_name)
                     count += 1
