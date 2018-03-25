@@ -23,7 +23,7 @@ from http import cookiejar
 import urllib.response
 
 
-PAT = re.compile(r'ueryId:"(\d*)?"', re.MULTILINE)
+PAT = re.compile(r'queryId:"(\d*)?"', re.MULTILINE)
 headers = {
     "Origin": "https://www.instagram.com/",
     "Referer": "https://www.instagram.com/",
@@ -43,7 +43,7 @@ BASE_URL = "https://www.instagram.com"
 
 # QUERY = "/morisakitomomi/"  # 森咲智美
 # QUERY = "/_8_jjini/"
-NEXT_URL = 'https://www.instagram.com/graphql/query/?query_id={0}&variables={1}'
+NEXT_URL = 'https://www.instagram.com/graphql/query/?query_hash={0}&variables={1}'
 
 with open('./config.json', 'r') as f:
     proxy = json.load(f)
@@ -59,13 +59,13 @@ def crawl(query):
     in_top_url_flag = False
     qq = requests.session()
     try:
-        if not os.path.exists('E:\\kankan\\%s' % folder):
-            os.mkdir('E:\\kankan\\%s' % folder)
+        if not os.path.exists('./images/%s' % folder):
+            os.mkdir('./images/%s' % folder)
 
         all_imgs_url = []
         new_imgs_url = []
-        if os.path.exists('E:\\kankan\\%s\\%s.txt' % (folder, folder)):
-            with open('E:\\kankan\\%s\\%s.txt' % (folder, folder), mode='r', encoding='utf-8') as f:
+        if os.path.exists('./images/%s/%s.txt' % (folder, folder)):
+            with open('./images/%s/%s.txt' % (folder, folder), mode='r', encoding='utf-8') as f:
                 for line in f.readlines():
                     if line.strip():
                         all_imgs_url.append(line)
@@ -81,16 +81,16 @@ def crawl(query):
             if a_tag.strip().startswith('window'):
                 data = a_tag.split('= {')[1][:-1]  # 获取json数据块
                 js_data = json.loads('{' + data, encoding='utf-8')
-                nodes = js_data["entry_data"]["ProfilePage"][0]["user"]["media"]["nodes"]
-                end_cursor = js_data["entry_data"]["ProfilePage"][0]["user"]["media"]["page_info"]["end_cursor"]
-                has_next = js_data["entry_data"]["ProfilePage"][0]["user"]["media"]["page_info"]["has_next_page"]
-                id = nodes[0]["owner"]["id"]
+                id = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["id"]
+                nodes = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"]["nodes"]
+                end_cursor = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"]["page_info"]["end_cursor"]
+                has_next = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"]["page_info"]["has_next_page"]
                 for node in nodes:
-                    if top_url and top_url == node["display_src"]:
+                    if top_url and top_url == node["display_url"]:
                         in_top_url_flag = True
                         break
-                    click.echo(node["display_src"])
-                    new_imgs_url.append(node["display_src"])
+                    click.echo(node["display_url"])
+                    new_imgs_url.append(node["display_url"])
                     # click.echo(qq.get(node["display_src"], proxies=proxy).status_code)
 
                 if in_top_url_flag:
@@ -100,15 +100,15 @@ def crawl(query):
                 query_id_list = PAT.findall(query_content.text)
                 for u in query_id_list:
                     click.echo(u)
-                # query_id = query_id_list[-1]
-                query_id = '17888483320059182'
+                query_hash = query_id_list[0]
                 retry = 0
                 # 更多的图片加载
                 while has_next and retry < 3 and not in_top_url_flag:
                     jso["id"] = id
+                    jso["first"] = 12
                     jso["after"] = end_cursor
                     text = json.dumps(jso)
-                    url = NEXT_URL.format(query_id, parse.quote(text))
+                    url = NEXT_URL.format(query_hash, parse.quote(text))
                     res = qq.get(url, proxies=proxy)
                     time.sleep(2)
                     html = json.loads(res.content.decode(), encoding='utf-8')
@@ -130,7 +130,7 @@ def crawl(query):
                 # qq.close()
         if new_imgs_url:
             all_urls = new_imgs_url + all_imgs_url
-            with open('E:\\kankan\\%s\\%s.txt' % (folder, folder), mode='w', encoding='utf-8') as f:
+            with open('./images/%s/%s.txt' % (folder, folder), mode='w', encoding='utf-8') as f:
                     for u in all_urls:
                         f.write(u + '\n')
         # t = threading.Thread(target=translate, args=(top_url, new_imgs_url, all_imgs_url, query))
@@ -152,7 +152,7 @@ def translate(top_url, news_imgs_url, all_imgs_url, path):
         # file_md5 = md5()
         # file_md5.update(top_url.encode('utf-8'))
         # file_name = file_md5.hexdigest()
-        # if os.path.exists('E:\\kankan\\%s\\%s.jpg' % (path, file_name)):
+        # if os.path.exists('./images/%s/%s.jpg' % (path, file_name)):
         #     return
         # else:
         click.echo('enter all')
@@ -183,7 +183,7 @@ def download(path, urls):
             file_md5 = md5()
             file_md5.update(url.encode('utf-8'))
             file_name = file_md5.hexdigest()
-            if os.path.exists('E:\\kankan\\%s\\%s.jpg' % (folder, file_name)):
+            if os.path.exists('./images/%s/%s.jpg' % (folder, file_name)):
                 count += 1
                 continue
             time.sleep(2)
@@ -191,7 +191,7 @@ def download(path, urls):
             click.echo(url + '=>' + str(res.status_code))
             click.echo(res.headers)
             if res.status_code == 200:
-                with open('E:\\kankan\\%s\\%s.jpg' % (folder, file_name), mode='wb') as f:
+                with open('./images/%s/%s.jpg' % (folder, file_name), mode='wb') as f:
                     f.write(res.content)
                     click.echo('%s.jpg save!' % file_name)
                     count += 1
