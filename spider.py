@@ -75,16 +75,16 @@ def crawl(query):
         res = qq.get(temp_url, headers=headers, proxies=proxy)
         html = etree.HTML(res.content.decode())
         all_a_tags = html.xpath('//script[@type="text/javascript"]/text()')  # 图片数据源
-        query_id_url = html.xpath('//script[@type="text/javascript"]/@src')  # query_id 作为内容加载
+        query_id_url = html.xpath('//script[@type="text/javascript"]/@src[1]')  # query_id 作为内容加载
         click.echo(query_id_url)
         for a_tag in all_a_tags:
             if a_tag.strip().startswith('window'):
                 data = a_tag.split('= {')[1][:-1]  # 获取json数据块
                 js_data = json.loads('{' + data, encoding='utf-8')
                 id = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["id"]
-                nodes = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"]["nodes"]
-                end_cursor = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"]["page_info"]["end_cursor"]
-                has_next = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"]["page_info"]["has_next_page"]
+                nodes = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["nodes"]
+                end_cursor = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["page_info"]["end_cursor"]
+                has_next = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["page_info"]["has_next_page"]
                 for node in nodes:
                     if top_url and top_url == node["display_url"]:
                         in_top_url_flag = True
@@ -96,7 +96,7 @@ def crawl(query):
                 if in_top_url_flag:
                     break
                 # 请求query_id
-                query_content = qq.get(BASE_URL + query_id_url[0], proxies=proxy)
+                query_content = qq.get(BASE_URL + query_id_url, proxies=proxy)
                 query_id_list = PAT.findall(query_content.text)
                 for u in query_id_list:
                     click.echo(u)
