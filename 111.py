@@ -23,7 +23,7 @@ from http import cookiejar
 import urllib.response
 
 
-PAT = re.compile(r'queryId:"(.+?)",', re.MULTILINE)
+PAT = re.compile(r'queryId:"(\d*)?"', re.MULTILINE)
 headers = {
     "Origin": "https://www.instagram.com/",
     "Referer": "https://www.instagram.com/",
@@ -82,30 +82,25 @@ def crawl(query):
                 data = a_tag.split('= {')[1][:-1]  # 获取json数据块
                 js_data = json.loads('{' + data, encoding='utf-8')
                 id = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["id"]
-                edges = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"]
-                print(edges)
+                nodes = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["node"]
                 end_cursor = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["page_info"]["end_cursor"]
                 has_next = js_data["entry_data"]["ProfilePage"][0]["graphql"]["user"]["edge_owner_to_timeline_media"]["page_info"]["has_next_page"]
-                for edge in edges:
-                    if top_url and top_url == edge["node"]["display_url"]:
+                for node in nodes:
+                    if top_url:
                         in_top_url_flag = True
                         break
-                    click.echo(edge["node"]["display_url"])
-                    new_imgs_url.append(edge["node"]["display_url"])
+                    click.echo(node["display_url"])
+                    new_imgs_url.append(node["display_url"])
                     # click.echo(qq.get(node["display_src"], proxies=proxy).status_code)
 
                 if in_top_url_flag:
                     break
                 # 请求query_id
-                print(BASE_URL + query_id_url[1])
-                query_content = qq.get(BASE_URL + query_id_url[1], proxies=proxy)
+                query_content = qq.get(BASE_URL + query_id_url[0], proxies=proxy)
                 query_id_list = PAT.findall(query_content.text)
-                print(query_id_list)
                 for u in query_id_list:
                     click.echo(u)
-                query_hash = query_id_list[1]
-                # 暂时不确定3个query_hash具体用哪个,目前看网页的情况是固定的
-                # query_hash = "472f257a40c653c64c666ce877d59d2b"
+                query_hash = query_id_list[0]
                 retry = 0
                 # 更多的图片加载
                 while has_next and retry < 3 and not in_top_url_flag:
@@ -113,9 +108,7 @@ def crawl(query):
                     jso["first"] = 12
                     jso["after"] = end_cursor
                     text = json.dumps(jso)
-                    # for query_hash in query_id_list:
                     url = NEXT_URL.format(query_hash, parse.quote(text))
-                    print(url)
                     res = qq.get(url, proxies=proxy)
                     time.sleep(2)
                     html = json.loads(res.content.decode(), encoding='utf-8')
@@ -220,57 +213,6 @@ def download(path, urls):
     finally:
         ss.close()
 
-
-# {'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*', 'Date': 'Tue, 29 Aug 2017 14:44:00 GMT', 'X-FB-Edge-Debug': '0SgdqUrVrprsJ061ZnHRWlTHLqBwZfkyOVnIOpk3HiaW9AWZ8Gpk1TAiRJP1kHAQCsB59J08egc44qA8JEZS0Q', 'Connection': 'keep-alive', 'Content-Length': '105'}
-
-# def download(path, urls):
-#     temp_url = BASE_URL + '/' + path + '/'
-#     cookie = cookiejar.CookieJar()  # 声明一个CookieJar对象实例来保存cookie
-#     handler = urllib.request.HTTPCookieProcessor(cookie)  # 利用urllib2库的HTTPCookieProcessor对象来创建cookie处理器
-#     header = {
-#         "Referer": temp_url,
-#         "Origin": "https://www.instagram.com/",
-#         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-#                       "Chrome/60.0.3112.113 Safari/537.36",
-#         'Connection': 'keep-alive'
-#     }
-#     proxy_handler = urllib.request.ProxyHandler(proxy)
-#     opener = urllib.request.build_opener(proxy_handler)  # 挂载opener
-#     opener.add_handler(handler)
-#     urllib.request.install_opener(opener)  # 安装opener
-#     # headers.update({'Referer': BASE_URL + '/' + path + '/'})
-#
-#     pp = opener.open(temp_url)
-#     click.echo(pp.info())
-#     try:
-#         count = 0
-#         all_count = len(urls)
-#         while count < all_count:
-#             url = urls[count][:-1]  # 去掉\n结尾
-#             file_md5 = md5()
-#             file_md5.update(url.encode('utf-8'))
-#             file_name = file_md5.hexdigest()
-#             if os.path.exists('E:\\kankan\\%s\\%s.jpg' % (path, file_name)):
-#                 count += 1
-#                 continue
-#             time.sleep(2)
-#             res = opener.open(url)  # 默认沿用请求首页的cookies
-#             click.echo(url + '=>' + str(res.code))
-#             click.echo(res.code)
-#             # if res.status_code == 400:
-#             #     click.echo(res.text)
-#             if res.code == 200:
-#                 with open('E:\\kankan\\%s\\%s.jpg' % (path, file_name), mode='wb') as f:
-#                     f.write(res.read())
-#                     click.echo('%s.jpg save!' % file_name)
-#                     count += 1
-#         click.echo('complete!')
-#     except Exception as e:
-#         raise e
-
-
 if __name__ == '__main__':
-    # 'morisakitomomi'
-    input_instagram = click.prompt("请输入Instagram用户", None)
+    input_instagram = click.prompt("请输入Instagram用户", None)  # 如 "/_8_jjini/"  等用户
     crawl(input_instagram)
-
