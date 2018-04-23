@@ -22,17 +22,17 @@ import urllib.request
 from http import cookiejar
 import urllib.response
 
+from utils import ctx
 
 PAT = re.compile(r'queryId:"(.+?)",', re.MULTILINE)
 headers = {
     "Origin": "https://www.instagram.com/",
     "Referer": "https://www.instagram.com/",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:59.0) Gecko/20100101 Firefox/59.0",
     "Host": "www.instagram.com",
-    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "accept": "*/*",
     "accept-encoding": "gzip, deflate, sdch, br",
     "accept-language": "zh-CN,zh;q=0.8",
-    "X-Instragram-AJAX": "1",
     "X-Requested-With": "XMLHttpRequest",
     "Upgrade-Insecure-Requests": "1",
 }
@@ -48,6 +48,9 @@ NEXT_URL = 'https://www.instagram.com/graphql/query/?query_hash={0}&variables={1
 with open('./config.json', 'r') as f:
     proxy = json.load(f)
     click.echo(proxy)
+
+# 没有爬取全部则不进行文件的读写
+IS_ALL_COMPLETE = False
 
 
 def crawl(query):
@@ -69,7 +72,8 @@ def crawl(query):
                 for line in f.readlines():
                     if line.strip():
                         all_imgs_url.append(line)
-            top_url = all_imgs_url[0][:-1]
+            if IS_ALL_COMPLETE:
+                top_url = all_imgs_url[0][:-1]
         temp_url = BASE_URL + '/' + query + '/'
         headers.update({'Referer': temp_url})
         res = qq.get(temp_url, headers=headers, proxies=proxy)
@@ -93,17 +97,17 @@ def crawl(query):
                     click.echo(edge["node"]["display_url"])
                     new_imgs_url.append(edge["node"]["display_url"])
                     # click.echo(qq.get(node["display_src"], proxies=proxy).status_code)
-
+                rhx_gis = js_data["rhx_gis"]
                 if in_top_url_flag:
                     break
                 # 请求query_id
                 print(BASE_URL + query_id_url[1])
                 query_content = qq.get(BASE_URL + query_id_url[1], proxies=proxy)
                 query_id_list = PAT.findall(query_content.text)
-                print(query_id_list)
                 for u in query_id_list:
                     click.echo(u)
                 query_hash = query_id_list[1]
+                print(query_hash)
                 # 暂时不确定3个query_hash具体用哪个,目前看网页的情况是固定的
                 # query_hash = "472f257a40c653c64c666ce877d59d2b"
                 retry = 0
@@ -112,12 +116,20 @@ def crawl(query):
                     jso["id"] = id
                     jso["first"] = 12
                     jso["after"] = end_cursor
-                    text = json.dumps(jso)
+                    # 注意了这处dumps默认会出都自动在，逗号和冒号后面添加空格，导致了格式不符合
+                    text = json.dumps(jso, separators=(',', ':'))
+                    xhr_code = "{0}:{1}".format(rhx_gis, text)
+                    print(xhr_code)
                     # for query_hash in query_id_list:
                     url = NEXT_URL.format(query_hash, parse.quote(text))
                     print(url)
-                    res = qq.get(url, proxies=proxy)
+                    gis = ctx.call("get_gis", xhr_code)
+                    # 就是缺少了这个GIS参数
+                    headers.setdefault("X-Instagram-GIS", gis)
+                    headers.update({"X-Instagram-GIS": gis})
+                    res = qq.get(url, headers=headers, proxies=proxy)
                     time.sleep(2)
+                    print(res.status_code)
                     html = json.loads(res.content.decode(), encoding='utf-8')
                     if '<' in html:  # 出现HTML tag
                         continue
@@ -127,19 +139,21 @@ def crawl(query):
                     has_next = html["data"]["user"]["edge_owner_to_timeline_media"]["page_info"]["has_next_page"]
                     end_cursor = html["data"]["user"]["edge_owner_to_timeline_media"]["page_info"]["end_cursor"]
                     edges = html["data"]["user"]["edge_owner_to_timeline_media"]["edges"]
+
                     for edge in edges:
                         if top_url and top_url == edge["node"]["display_url"]:
                             in_top_url_flag = True
                             break
                         click.echo(edge["node"]["display_url"])
                         new_imgs_url.append(edge["node"]["display_url"])
+                    if new_imgs_url:
+                        print('enter.....')
+                        all_urls = new_imgs_url + all_imgs_url
+                        with open('./images/%s/%s.txt' % (folder, folder), mode='w+', encoding='utf-8') as f:
+                            for u in all_urls:
+                                f.write(u + '\n')
                 click.echo('ok')
                 # qq.close()
-        if new_imgs_url:
-            all_urls = new_imgs_url + all_imgs_url
-            with open('./images/%s/%s.txt' % (folder, folder), mode='w', encoding='utf-8') as f:
-                    for u in all_urls:
-                        f.write(u + '\n')
         # t = threading.Thread(target=translate, args=(top_url, new_imgs_url, all_imgs_url, query))
         # t.setDaemon(True)
         # t.start()
@@ -194,7 +208,7 @@ def download(path, urls):
                 count += 1
                 continue
             time.sleep(2)
-            res = ss.get(url, proxies=proxy)  # 默认沿用请求首页的cookies
+            res = ss.get(url, headers=headers, proxies=proxy)  # 默认沿用请求首页的cookies
             click.echo(url + '=>' + str(res.status_code))
             click.echo(res.headers)
             if res.status_code == 200:
@@ -271,6 +285,6 @@ def download(path, urls):
 
 if __name__ == '__main__':
     # 'morisakitomomi'
-    input_instagram = click.prompt("请输入Instagram用户", None)
+    input_instagram = 'morisakitomomi'  # click.prompt("请输入Instagram用户", None)
     crawl(input_instagram)
 
