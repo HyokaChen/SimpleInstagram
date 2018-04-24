@@ -16,11 +16,8 @@ import requests
 import click
 from urllib import parse
 import time
-import random
 from hashlib import md5
-import urllib.request
-from http import cookiejar
-import urllib.response
+import random
 
 from utils import ctx
 
@@ -64,9 +61,8 @@ def crawl(query):
     try:
         if not os.path.exists('./images/%s' % folder):
             os.mkdir('./images/%s' % folder)
-
-        all_imgs_url = []
         new_imgs_url = []
+        all_imgs_url = []
         if os.path.exists('./images/%s/%s.txt' % (folder, folder)):
             with open('./images/%s/%s.txt' % (folder, folder), mode='r', encoding='utf-8') as f:
                 for line in f.readlines():
@@ -106,63 +102,74 @@ def crawl(query):
                 query_id_list = PAT.findall(query_content.text)
                 for u in query_id_list:
                     click.echo(u)
+                # 看起来使用的是第二个hash
                 query_hash = query_id_list[1]
                 print(query_hash)
                 # 暂时不确定3个query_hash具体用哪个,目前看网页的情况是固定的
                 # query_hash = "472f257a40c653c64c666ce877d59d2b"
                 retry = 0
-                # 更多的图片加载
-                while has_next and retry < 3 and not in_top_url_flag:
-                    jso["id"] = id
-                    jso["first"] = 12
-                    jso["after"] = end_cursor
-                    # 注意了这处dumps默认会出都自动在，逗号和冒号后面添加空格，导致了格式不符合
-                    text = json.dumps(jso, separators=(',', ':'))
-                    xhr_code = "{0}:{1}".format(rhx_gis, text)
-                    print(xhr_code)
-                    # for query_hash in query_id_list:
-                    url = NEXT_URL.format(query_hash, parse.quote(text))
-                    print(url)
-                    gis = ctx.call("get_gis", xhr_code)
-                    # 就是缺少了这个GIS参数
-                    headers.setdefault("X-Instagram-GIS", gis)
-                    headers.update({"X-Instagram-GIS": gis})
-                    res = qq.get(url, headers=headers, proxies=proxy)
-                    time.sleep(2)
-                    print(res.status_code)
-                    html = json.loads(res.content.decode(), encoding='utf-8')
-                    if '<' in html:  # 出现HTML tag
-                        continue
-                    if 'data' not in html:  # data不再json数据中，可能是网络请求引发，进行重试请求
-                        retry += 1
-                        continue
-                    has_next = html["data"]["user"]["edge_owner_to_timeline_media"]["page_info"]["has_next_page"]
-                    end_cursor = html["data"]["user"]["edge_owner_to_timeline_media"]["page_info"]["end_cursor"]
-                    edges = html["data"]["user"]["edge_owner_to_timeline_media"]["edges"]
-
-                    for edge in edges:
-                        if top_url and top_url == edge["node"]["display_url"]:
-                            in_top_url_flag = True
-                            break
-                        click.echo(edge["node"]["display_url"])
-                        new_imgs_url.append(edge["node"]["display_url"])
-                    if new_imgs_url:
-                        print('enter.....')
-                        all_urls = new_imgs_url + all_imgs_url
-                        with open('./images/%s/%s.txt' % (folder, folder), mode='w+', encoding='utf-8') as f:
-                            for u in all_urls:
-                                f.write(u + '\n')
-                click.echo('ok')
-                # qq.close()
-        # t = threading.Thread(target=translate, args=(top_url, new_imgs_url, all_imgs_url, query))
-        # t.setDaemon(True)
-        # t.start()
-        # t.join()
+                # 加载更多
+                new_imgs_url = load_more(qq, id, has_next, query_hash, rhx_gis, end_cursor, top_url, in_top_url_flag, retry)
+        if len(new_imgs_url):
+            print('enter.....')
+            all_urls = new_imgs_url + all_imgs_url
+            with open('./images/%s/%s.txt' % (folder, folder), mode='w+', encoding='utf-8') as f:
+                for u in all_urls:
+                    f.write(u + '\n')
         translate(top_url, new_imgs_url, all_imgs_url, query)
     except Exception as e:
         raise e
     finally:
         qq.close()
+
+
+def load_more(session, id, has_next, query_hash, rhx_gis, end_cursor, top_url, in_top_url_flag, retry):
+    new_imgs_url = []
+    # 更多的图片加载
+    while has_next and not in_top_url_flag:
+        jso["id"] = id
+        jso["first"] = 12
+        jso["after"] = end_cursor
+        # 注意了这处dumps默认会出都自动在，逗号和冒号后面添加空格，导致了格式不符合
+        text = json.dumps(jso, separators=(',', ':'))
+        xhr_code = "{0}:{1}".format(rhx_gis, text)
+        print(xhr_code)
+        # for query_hash in query_id_list:
+        url = NEXT_URL.format(query_hash, parse.quote(text))
+        print(url)
+        gis = ctx.call("get_gis", xhr_code)
+        # 就是缺少了这个GIS参数
+        headers.setdefault("X-Instagram-GIS", gis)
+        headers.update({"X-Instagram-GIS": gis})
+        res = None
+        while retry < 3:
+            try:
+                res = session.get(url, headers=headers, proxies=proxy)
+            except Exception as e:
+                print('error >>%s' % url)
+                time.sleep(random.random() * 2)
+        time.sleep(random.random() * 2)
+        if res is None:
+            return new_imgs_url
+        print(res.status_code)
+        html = json.loads(res.content.decode(), encoding='utf-8')
+        if '<' in html:  # 出现HTML tag
+            continue
+        if 'data' not in html:  # data不再json数据中，可能是网络请求引发，进行重试请求
+            retry += 1
+            continue
+        has_next = html["data"]["user"]["edge_owner_to_timeline_media"]["page_info"]["has_next_page"]
+        end_cursor = html["data"]["user"]["edge_owner_to_timeline_media"]["page_info"]["end_cursor"]
+        edges = html["data"]["user"]["edge_owner_to_timeline_media"]["edges"]
+
+        for edge in edges:
+            if top_url and top_url == edge["node"]["display_url"]:
+                in_top_url_flag = True
+                break
+            click.echo(edge["node"]["display_url"])
+            new_imgs_url.append(edge["node"]["display_url"])
+    click.echo('ok')
+    return new_imgs_url
 
 
 def translate(top_url, news_imgs_url, all_imgs_url, path):
@@ -207,7 +214,7 @@ def download(path, urls):
             if os.path.exists('./images/%s/%s.jpg' % (folder, file_name)):
                 count += 1
                 continue
-            time.sleep(2)
+            time.sleep(random.random() * 2)
             res = ss.get(url, headers=headers, proxies=proxy)  # 默认沿用请求首页的cookies
             click.echo(url + '=>' + str(res.status_code))
             click.echo(res.headers)
@@ -285,6 +292,6 @@ def download(path, urls):
 
 if __name__ == '__main__':
     # 'morisakitomomi'
-    input_instagram = 'morisakitomomi'  # click.prompt("请输入Instagram用户", None)
+    input_instagram = click.prompt("请输入Instagram用户", None)
     crawl(input_instagram)
 
